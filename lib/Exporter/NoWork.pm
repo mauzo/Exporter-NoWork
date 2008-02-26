@@ -7,7 +7,7 @@ use warnings;
 use Carp;
 use Attribute::Handlers;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 my %Config;
 
@@ -223,11 +223,13 @@ to export.
 
 =head1 AUTHOR
 
-Ben Morrow <Exporter-NoWork@morrow.me.uk>
+Ben Morrow <ben@morrow.me.uk>
+
+Please report bugs at rt.cpan.org.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2004 Ben Morrow. This module may be distributed under the
+Copyright 2004 Ben Morrow. This module may be distributed under the
 same terms as Perl.
 
 =cut
