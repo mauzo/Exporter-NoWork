@@ -19,7 +19,8 @@ sub import {
     no warnings 'uninitialized';
 
     if ($from eq __PACKAGE__) {
-        push @{"$to\::ISA"}, __PACKAGE__;
+        push @{"$to\::ISA"}, __PACKAGE__
+            unless $to->isa(__PACKAGE__);
         
         for (@_) {
             /^-MAGIC$/ and do {
@@ -62,67 +63,75 @@ sub import {
 
     my @todo;
 
-    while ($_ = shift) {
-        /^import$/i | /^CONFIG$/ and do {
-            croak "Import methods can't be imported";
-            next;
-        };
-        
-        s/^:// and do {
-            /^ALL$/ and do {
-                push @_, @{$Config{$from}{all}};
-                next;
-            };
-            /^DEFAULT$/ and do {
-                push @_, @{$Config{$from}{default}};
-                next;
-            };
-            /^CONSTS$/ and do {
-                push @_, @{$Config{$from}{consts}};
-                next;
-            };
-        
-            if ($Config{$from}{tags}{$_}) {
-                push @todo, @{$Config{$from}{tags}{$_}};
-            }
-            else {
-                croak qq{Tag ":$_" is not recognized by $from};
-            }
-            next;
-        };
+    SUB:
+    while (my $sub = shift) {
 
-        s/^-// and do {
-            if (${"$from\::CONFIG"}{$_}) {
-                ${"$from\::CONFIG"}{$_}->($from, $_, \@_);
-            }
-            elsif ($from->can('CONFIG')) {
-                $from->CONFIG($_, \@_);
-            }
-            else {
-                croak qq{Config option "-$_" is not recognized by $from};
-            }
-            next;
-        };
+        # we have to do it like this, as C<local $_> doesn't work
+        for ($sub) {
+            /^import$/i | /^CONFIG$/ and do {
+                croak "Import methods can't be imported";
+                next SUB;
+            };
+            
+            s/^:// and do {
+                /^ALL$/ and do {
+                    push @_, @{$Config{$from}{all}};
+                    next SUB;
+                };
+                /^DEFAULT$/ and do {
+                    push @_, @{$Config{$from}{default}};
+                    next SUB;
+                };
+                /^CONSTS$/ and do {
+                    push @_, @{$Config{$from}{consts}};
+                    next SUB;
+                };
+            
+                if ($Config{$from}{tags}{$_}) {
+                    push @todo, @{$Config{$from}{tags}{$_}};
+                }
+                else {
+                    croak qq{Tag ":$_" is not recognized by $from};
+                }
+                next SUB;
+            };
 
-        s/^\&//;
-        /\W/ || /^_/ and croak qq{"$_" is not exported by $from};
-        
-        {
-            no warnings 'uninitialized';
-            /^[[:upper:]]+$/ and $Config{$from}{uc} eq 'magic'
-                and croak qq{Magic methods can't be exported};
+            s/^-// and do {
+                if (${"$from\::CONFIG"}{$_}) {
+                    ${"$from\::CONFIG"}{$_}->($from, $_, \@_);
+                }
+                elsif ($from->can('CONFIG')) {
+                    $from->CONFIG($_, \@_);
+                }
+                else {
+                    croak qq{Config option "-$_" is not recognized by $from};
+                }
+                next SUB;
+            };
+
+            s/^\&//;
+            /\W/ || /^_/ and croak qq{"$_" is not exported by $from};
+            
+            {
+                no warnings 'uninitialized';
+                /^[[:upper:]]+$/ and $Config{$from}{uc} eq 'magic'
+                    and croak qq{Magic methods can't be exported};
+            }
         }
 
-        if (exists &{"$from\::$_"}) { 
-            *{"$to\::$_"} = \&{"$from\::$_"};
-            next;
+        if (exists &{"$from\::$sub"}) { 
+            #carp "copying \&$from\::$sub into $to";
+            *{"$to\::$sub"} = \&{"$from\::$sub"};
+            next SUB;
         }
 
-        croak qq{"$_" is not exported by $from};
+        croak qq{"$sub" is not exported by $from};
     }
 
     for (keys %{"$from\::"}) {
         for my $ref (@todo) {
+            defined &{"$from\::$_"} or next;
+            #carp "ref-ifying \&$from\::$_";
             if ($ref == \&{"$from\::$_"}) {
                 *{"$to\::$_"} = $ref;
             }
