@@ -5,6 +5,7 @@ use strict;
 
 use Test::More;
 use Symbol;
+use B;
 
 my $tests;
 
@@ -82,14 +83,23 @@ sub cant_ok {
     my @nok;
 
     for (@_) {
-        $PKG->can($_) and push @nok, $_;
+        my $can = $PKG->can($_);
+        $can and
+            not (
+                $] < 5.008 and
+                $can == \&Attribute::Handlers::import
+            ) and
+            push @nok, $_;
     }
 
     my $ok = $tb->ok(!@nok, $msg);
     
-    $tb->diag(<<DIAG) for @nok;
-\&$PKG\::$_ should not exist.
+    for (@nok) {
+        my $from = B::svref_2object($PKG->can($_))->GV->STASH->NAME;
+        $tb->diag(<<DIAG);
+    \&$PKG\::$_ is imported from $from
 DIAG
+    }
 
     return $ok;
 }
@@ -117,7 +127,11 @@ ok(     t::Basic->isa('Exporter::NoWork'),  'inheritance is set up');
 
 # [rt.cpan.org #33595]
 is grep($_ eq 'Exporter::NoWork', @t::Basic::ISA), 1, '...but only once';
-is_deeply \@t::Inherit::ISA, ['t::Basic'], '...even with inheritance';
+
+SKIP: {
+    $] < 5.008 and skip 'PKG->isa fails under 5.6', 1;
+    is_deeply \@t::Inherit::ISA, ['t::Basic'], '...even with inheritance';
+}
 
 BEGIN { $tests += 9 }
 
@@ -168,6 +182,8 @@ $PKG++;
 
 import_ok   't::Basic', ':DEFAULT',     ':DEFAULT imports';
 cant_ok     @subs,                      '...nothing';
+
+$PKG++;
 
 import_ok   't::Basic', ':ALL',         ':ALL imports';
 is_import   qw/public CAPS t::Basic/,   '...enough';

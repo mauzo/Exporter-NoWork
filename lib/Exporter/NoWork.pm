@@ -19,8 +19,13 @@ sub import {
     no warnings 'uninitialized';
 
     if ($from eq __PACKAGE__) {
-        push @{"$to\::ISA"}, __PACKAGE__
-            unless $to->isa(__PACKAGE__);
+
+        # ->isa fails on 5.6, don't know why
+        my $doneISA = $] < 5.008
+            ? grep $_ eq __PACKAGE__, @{"$to\::ISA"}
+            : $to->isa(__PACKAGE__);
+
+        push @{"$to\::ISA"}, __PACKAGE__ unless $doneISA;
         
         for (@_) {
             /^-MAGIC$/ and do {
