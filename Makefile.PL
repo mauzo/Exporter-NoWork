@@ -6,7 +6,8 @@ name            'Exporter-NoWork';
 license         'perl';
 all_from        'lib/Exporter/NoWork.pm';
 
-requires        'Attribute::Handlers' => 0;
+requires        'Attribute::Handlers'   => '0.80';
+requires        'Test::More'            => '0.61';
 
 auto_install;
 WriteAll;
