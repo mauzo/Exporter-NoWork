@@ -4,8 +4,7 @@ use warnings;
 use strict;
 
 use Test::More;
-use Symbol;
-use B;
+use Test::Exports;
 
 my $tests;
 
@@ -13,98 +12,6 @@ BEGIN { $tests += 1 }
 
 require_ok  'Exporter::NoWork'
     or BAIL_OUT "can't load module";
-
-my $PKG = 'TestAAAA';
-
-## At what point do the tests become more complicated and less reliable
-## than the code they're testing...?
-
-sub import_ok {
-    my ($mod, $args, $msg) = @_;
-    my $tb  = Test::More->builder;
-
-    my $code = "package $PKG; $mod->import(qw/$args/); 1";
-
-    #$tb->diag($code);
-
-    my $eval = eval $code;
-
-    $tb->ok($eval, $msg) or $tb->diag(<<DIAG);
-$mod->import(qw/$args/) failed:
-$@
-DIAG
-}
-
-sub import_nok {
-    my ($mod, $args, $msg) = @_;
-    my $tb  = Test::More->builder;
-
-    my $eval = eval "package $PKG; $mod->import(qw/$args/); 1";
-
-    $tb->ok(!$eval, $msg) or $tb->diag(<<DIAG);
-$mod->import(qw/$args/) succeeded where it should have failed.
-DIAG
-}
-
-sub is_import {
-    my $msg  = pop;
-    my $from = pop;
-    my $tb = Test::More->builder;
-
-    my @nok;
-
-    for (@_) {
-        my $to = "$PKG\::$_";
-
-        no strict 'refs';
-        unless (defined &$to) {
-            push @nok, <<DIAG;
-  \&$to is not defined
-DIAG
-            next;
-        }
-
-        \&$to == \&{"$from\::$_"} or push @nok, <<DIAG;
-  \&$to is not imported correctly
-DIAG
-    }
-
-    my $ok = $tb->ok(!@nok, $msg) or $tb->diag(<<DIAG);
-Expected subs to be imported from $from:
-DIAG
-    $tb->diag($_) for @nok;
-    return $ok;
-}
-
-sub cant_ok {
-    my $msg = pop;
-    my $tb  = Test::More->builder;
-
-    my @nok;
-
-    for (@_) {
-        my $can = $PKG->can($_);
-        $can and
-            not (
-                $] < 5.008 and
-                $can == \&Attribute::Handlers::import
-            ) and
-            push @nok, $_;
-    }
-
-    my $ok = $tb->ok(!@nok, $msg);
-    
-    for (@nok) {
-        my $from = B::svref_2object($PKG->can($_))->GV->STASH->NAME;
-        $tb->diag(<<DIAG);
-    \&$PKG\::$_ is imported from $from
-DIAG
-    }
-
-    return $ok;
-}
-
-## OK, now let's have some actual tests.
 
 {
     package t::Basic;
@@ -138,54 +45,54 @@ BEGIN { $tests += 9 }
 my @subs = qw/public _private CAPS import ALL/;
 $_ = 'flirble';
 
-import_ok   't::Basic', '',             'empty import list';
+import_ok   't::Basic', [],             'empty import list';
 cant_ok     @subs,                      '...imports nothing';
 # [rt.cpan.org #33584]
 is          $_,         'flirble',      '...without clobbering $_';
 
-import_ok   't::Basic', 'public',       'public sub imports';
+import_ok   't::Basic', ['public'],       'public sub imports';
 is_import   'public',   't::Basic',     '...correctly';
 
-import_ok   't::Basic', 'CAPS',         'CAPS sub imports';
+import_ok   't::Basic', ['CAPS'],         'CAPS sub imports';
 is_import   'CAPS',     't::Basic',     '...correctly';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Basic', '&public',      'sub with & imports';
+import_ok   't::Basic', ['&public'],      'sub with & imports';
 is_import   'public',   't::Basic',     '...correctly';
 
 BEGIN { $tests += 9 }
 
-import_nok  't::Basic', '_private',     '_private sub fails';
+import_nok  't::Basic', ['_private'],     '_private sub fails';
 like        $@, qr/is not exported by/, '...correctly';
 cant_ok     '_private',                 '...and isn\'t imported';
 
-import_nok  't::Basic', 'notexist',     'nonexistant sub fails';
+import_nok  't::Basic', ['notexist'],     'nonexistant sub fails';
 like        $@, qr/is not exported by/, '...correctly';
 cant_ok     'notexist',                 '...and isn\'t imported';
 
-import_nok  't::Basic', 'import',           '\'import\' fails';
+import_nok  't::Basic', ['import'],           '\'import\' fails';
 like        $@, qr/Import methods can't/,   '...correctly';
 cant_ok     'import',                       '...and doesn\'t import';
 
 BEGIN { $tests += 4 }
 
-import_nok  't::Basic', '-option',      '-option fails';
+import_nok  't::Basic', ['-option'],      '-option fails';
 like        $@, qr/option.*not recog/,  '...correctly';
 
-import_nok  't::Basic', ':tag',         ':tag fails';
+import_nok  't::Basic', [':tag'],         ':tag fails';
 like        $@, qr/Tag.*not recog/,     '...correctly';
 
 BEGIN { $tests += 5 }
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Basic', ':DEFAULT',     ':DEFAULT imports';
+import_ok   't::Basic', [':DEFAULT'],     ':DEFAULT imports';
 cant_ok     @subs,                      '...nothing';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Basic', ':ALL',         ':ALL imports';
+import_ok   't::Basic', [':ALL'],         ':ALL imports';
 is_import   qw/public CAPS t::Basic/,   '...enough';
 cant_ok     qw/_private import/,        '...but not too much';
 
@@ -200,27 +107,27 @@ cant_ok     qw/_private import/,        '...but not too much';
 
 BEGIN { $tests += 12 }
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Default',   '',             'blank import';
+import_ok   't::Default',   [],             'blank import';
 is_import   'default',      't::Default',   '...imports default';
 cant_ok     qw/public _private/,            '...but no more';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Default',   'public',       'specified import';
+import_ok   't::Default',   ['public'],       'specified import';
 is_import   'public',       't::Default',   '...imports correctly';
 cant_ok     qw/default _private/,           '...without default';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Default',   ':DEFAULT',     ':DEFAULT import';
+import_ok   't::Default',   [':DEFAULT'],     ':DEFAULT import';
 is_import   'default',      't::Default',   '...imports default';
 cant_ok     qw/public _private/,            '...but no more';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Default',   ':DEFAULT public',
+import_ok   't::Default',   [qw':DEFAULT public'],
                                             ':DEFAULT+more import';
 is_import   qw/public default t::Default/,  '...imports correctly';
 cant_ok     qw/_private/,                   '...but no more';
@@ -236,30 +143,30 @@ eval q/
 
 BEGIN { $tests += 10 }
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Tags',      '',             'blank import';
+import_ok   't::Tags',      [],             'blank import';
 cant_ok     qw/public tag1 tag2/,           '...imports nothing';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Tags',      ':ALL',         ':ALL import';
+import_ok   't::Tags',      [':ALL'],         ':ALL import';
 is_import   qw/tag1 tag2 public t::Tags/,   '...imports correctly';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Tags',      ':foo',         'tagged import';
+import_ok   't::Tags',      [':foo'],         'tagged import';
 is_import   qw/tag1 tag2/,  't::Tags',      '...imports correctly';
 cant_ok     qw/public/,                     '...but no more';
 
-$PKG++;
+new_import_pkg;
 
 # using tags broke subsequent imports in 0.01
 import_ok   't::Tags',      '',             '->import still works';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Tags',      ':foo public',  'tag+more import';
+import_ok   't::Tags',      [qw':foo public'],  'tag+more import';
 is_import   qw/tag1 tag2 public t::Tags/,   '...imports correctly';
 
 {
@@ -273,20 +180,20 @@ is_import   qw/tag1 tag2 public t::Tags/,   '...imports correctly';
 
 BEGIN { $tests += 8 }
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Consts',    '',             '-CONSTS blank import';
+import_ok   't::Consts',    [],             '-CONSTS blank import';
 is_import   qw/default CONSTANT t::Consts/, '...imports constants';
 cant_ok     qw/_PRIVATE/,                   '...public only';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Consts',    ':DEFAULT',     '-CONSTS :DEFAULT import';
+import_ok   't::Consts',    [':DEFAULT'],     '-CONSTS :DEFAULT import';
 is_import   qw/default CONSTANT t::Consts/, '...imports constants';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Consts',    ':CONSTS',      ':CONSTS import';
+import_ok   't::Consts',    [':CONSTS'],      ':CONSTS import';
 is_import   qw/CONSTANT/,   't::Consts',    '...imports constants';
 cant_ok     'default',                      '...but not ordinary subs';
 
@@ -299,9 +206,9 @@ cant_ok     'default',                      '...but not ordinary subs';
 
 BEGIN { $tests += 2 }
 
-$PKG++;
+new_import_pkg;
 
-import_nok  't::Magic',     'MAGIC',        '-MAGIC import fails';
+import_nok  't::Magic',     ['MAGIC'],        '-MAGIC import fails';
 like        $@, qr/Magic methods can't/,    '...with correct message';
 
 my ($IMPORT, $defsv);
@@ -328,15 +235,15 @@ my ($IMPORT, $defsv);
 
 BEGIN { $tests += 6 }
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::IMPORT', 'foo',     'package with IMPORT';
+import_ok   't::IMPORT', ['foo'],     'package with IMPORT';
 is          $IMPORT,    1,          '...which gets called';
 is_import   'bar', 't::IMPORT',     '...and the return value honoured';
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::ParentIMP', 'afoo', 'package with inherited IMPORT';
+import_ok   't::ParentIMP', ['afoo'], 'package with inherited IMPORT';
 is          $IMPORT,    2,          '...which gets called';
 is_import   'abar', 't::ParentIMP', '...and the return value honoured';
 
@@ -365,27 +272,27 @@ my $CONFIG;
 
 BEGIN { $tests += 12 }
 
-$PKG++;
+new_import_pkg;
 
-import_ok   't::Config',    '-hash',        'import with option';
+import_ok   't::Config',    ['-hash'],        'import with option';
 is          $CONFIG,        'hash t::Config',    '...calls sub in %CONFIG';
 
-$PKG++; $CONFIG = '';
+new_import_pkg; $CONFIG = '';
 
-import_ok   't::Config',    '-hash public', 'import w/option and sub';
+import_ok   't::Config',    [qw'-hash public'], 'import w/option and sub';
 is          $CONFIG,        'hash t::Config',    '...calls sub in %CONFIG';
 is_import   'public',       't::Config',    '...and imports sub';
 
-$PKG++; $CONFIG = '';
+new_import_pkg; $CONFIG = '';
 
-import_ok   't::Config',    '-arg fake',    'option w/arg';
+import_ok   't::Config',    [qw'-arg fake'],    'option w/arg';
 is          $CONFIG,        'hash t::Config fake',
                                             '...calls sub in %CONFIG';
 cant_ok     'fake',                         '...doesn\'t import';
 
-$PKG++; $CONFIG = '';
+new_import_pkg; $CONFIG = '';
 
-import_ok   't::Config',    '-arg fake public',
+import_ok   't::Config',    [qw'-arg fake public'],
                                             'option, arg, & sub';
 is          $CONFIG,        'hash t::Config fake',
                                             '...calls sub in %CONFIG';
@@ -394,29 +301,29 @@ is_import   'public',       't::Config',    '...does import sub';
 
 BEGIN { $tests += 12 }
 
-$PKG++; $CONFIG = '';
+new_import_pkg; $CONFIG = '';
 
-import_ok   't::Config',    '-bar',         'import with option';
+import_ok   't::Config',    ['-bar'],         'import with option';
 is          $CONFIG,        'meth t::Config bar',
                                             '...calls ->CONFIG';
 
-$PKG++; $CONFIG = '';
+new_import_pkg; $CONFIG = '';
 
-import_ok   't::Config',    '-bar public',  'import w/option and sub';
+import_ok   't::Config',    [qw'-bar public'],  'import w/option and sub';
 is          $CONFIG,        'meth t::Config bar',
                                             '...calls ->CONFIG';
 is_import   'public',       't::Config',    '...and imports sub';
 
-$PKG++; $CONFIG = '';
+new_import_pkg; $CONFIG = '';
 
-import_ok   't::Config',    '-marg fake',   'option w/arg';
+import_ok   't::Config',    [qw'-marg fake'],   'option w/arg';
 is          $CONFIG,        'meth t::Config marg fake',
                                             '...calls ->CONFIG';
 cant_ok     'fake',                         '...doesn\'t import';
 
-$PKG++; $CONFIG = '';
+new_import_pkg; $CONFIG = '';
 
-import_ok   't::Config',    '-marg fake public',
+import_ok   't::Config',    [qw'-marg fake public'],
                                             'option, arg, & sub';
 is          $CONFIG,        'meth t::Config marg fake',
                                             '...calls ->CONFIG';
@@ -425,9 +332,9 @@ is_import   'public',       't::Config',    '...does import sub';
 
 BEGIN { $tests += 2 }
 
-$PKG++; $CONFIG = '';
+new_import_pkg; $CONFIG = '';
 
-import_ok   't::Config::Inherit',   '-foo', 'inherited ->CONFIG';
+import_ok   't::Config::Inherit',   ['-foo'], 'inherited ->CONFIG';
 is          $CONFIG, 'meth t::Config::Inherit foo',
                                             '...calls method';
 
