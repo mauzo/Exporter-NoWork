@@ -7,7 +7,7 @@ use warnings;
 use Carp;
 use Attribute::Handlers;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 my %Config;
 
