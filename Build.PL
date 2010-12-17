@@ -10,4 +10,11 @@ Module::Build->new(
         "Test::More"    => "0.61",
         "Test::Exports" => "1",
     },
+    meta_merge      => {
+        resources => {
+            bugtracker => 
+                "https://rt.cpan.org/Public/Dist/Display.html?Name=Exporter-NoWork",
+            repository => "http://github.com/mauzo/Exporter-NoWork",
+        },
+    },
 )->create_build_script;
